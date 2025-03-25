@@ -1,0 +1,225 @@
+<!-- Modules/magnifier.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Magnifier Tool - Image Forensics Multi-Tool" />
+  <meta name="keywords" content="Image Forensics, Magnifier, Photo Analysis" />
+  <meta name="author" content="Risk" />
+  <title>Magnifier - Image Forensics Multi-Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif; background-color: #f4f4f9;
+      margin: 0; padding: 0; display: flex; flex-direction: column;
+    }
+    header {
+      background-color: #333; color: #fff;
+      text-align: center; padding: 15px;
+    }
+    .container {
+      margin: 20px auto; width: 90%; max-width: 1000px;
+      display: flex; flex-direction: column; gap: 10px;
+      position: relative;
+    }
+    #fileInput {
+      margin-bottom: 10px; cursor: pointer;
+    }
+    [data-tooltip] {
+      position: relative; cursor: help;
+    }
+    [data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; background: #333; color: #fff;
+      padding: 5px; border-radius: 4px;
+      top: 100%; left: 0; transform: translateY(5px);
+      z-index: 9999; font-size: 0.85rem;
+    }
+    #mainCanvas {
+      border: 1px solid #ccc; max-width: 100%;
+      display: block; margin-bottom: 10px;
+    }
+    #magnifierCanvas {
+      position: absolute; border: 2px solid #333;
+      border-radius: 50%; pointer-events: none; display: none;
+    }
+    .sliders {
+      display: flex; flex-direction: column; gap: 10px; max-width: 300px;
+    }
+    label { font-weight: bold; }
+    input[type="range"] { width: 100%; }
+    button {
+      padding: 10px 15px; background-color: #007bff;
+      color: #fff; border: none; border-radius: 5px;
+      cursor: pointer; margin-right: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .nav-buttons {
+      display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    .output {
+      background-color: #e8e8ee; padding: 10px;
+      border-radius: 5px; min-height: 40px;
+    }
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; z-index: 9999;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff; margin: 80px auto; padding: 20px;
+      width: 90%; max-width: 600px; border-radius: 6px;
+      position: relative; text-align: left; color: #000;
+    }
+    .modal-close {
+      position: absolute; top: 10px; right: 15px;
+      font-size: 20px; font-weight: bold; cursor: pointer;
+      background: none; border: none; color: #000;
+    }
+    .modal-header { font-size: 1.2em; margin-bottom: 10px; }
+    .modal-body { line-height: 1.4em; }
+    .modal-body p { margin: 0.5em 0; }
+    .modal-button {
+      margin-top: 15px; background-color: #007bff; color: #fff;
+      border: none; border-radius: 5px; padding: 8px 15px; cursor: pointer;
+    }
+    .modal-button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Magnifier</h1>
+  </header>
+
+  <!-- How to Use Modal -->
+  <div id="howToUseModal" class="modal-overlay">
+    <div class="modal-content">
+      <button id="closeModal" class="modal-close">&times;</button>
+      <div class="modal-header">How to Use - Magnifier</div>
+      <div class="modal-body">
+        <p><strong>Goal:</strong> Zoom in on a small circular area around your mouse to inspect details.</p>
+        <p>1. Load an image.<br>
+           2. Adjust the "Magnification" slider for zoom level.<br>
+           3. Toggle the magnifier on/off. Hover your mouse over the image to see a circular magnified view.</p>
+        <p>Tip: Magnifier is helpful for analyzing suspicious edges or pixel artifacts up close.</p>
+      </div>
+      <button id="closeModalBtn" class="modal-button">Close</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/*"
+      data-tooltip="Load an image to inspect with the magnifier"
+    />
+    <canvas id="mainCanvas"></canvas>
+    <canvas id="magnifierCanvas" width="150" height="150"></canvas>
+    <div class="sliders">
+      <label for="magnificationRange" data-tooltip="Controls the zoom level inside the circular lens">
+        Magnification
+      </label>
+      <input type="range" id="magnificationRange" min="1" max="5" step="0.1" value="2" />
+    </div>
+    <div class="nav-buttons">
+      <button
+        id="toggleMagnifier"
+        data-tooltip="Enable or disable the circular magnifier"
+      >
+        Toggle Magnifier
+      </button>
+      <button
+        id="howToUseBtn"
+        data-tooltip="View instructions on using the Magnifier"
+      >
+        How to Use
+      </button>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const mainCanvas = document.getElementById('mainCanvas');
+    const magnifierCanvas = document.getElementById('magnifierCanvas');
+    const mainCtx = mainCanvas.getContext('2d');
+    const magnifierCtx = magnifierCanvas.getContext('2d');
+    const magnificationRange = document.getElementById('magnificationRange');
+    const toggleMagnifierBtn = document.getElementById('toggleMagnifier');
+    const output = document.getElementById('output');
+    let originalImageData = null;
+    let magnifierActive = false;
+
+    // Modal
+    const howToUseModal = document.getElementById('howToUseModal');
+    const closeModal = document.getElementById('closeModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const howToUseBtn = document.getElementById('howToUseBtn');
+
+    howToUseBtn.onclick = () => { howToUseModal.style.display = 'block'; };
+    closeModal.onclick = () => { howToUseModal.style.display = 'none'; };
+    closeModalBtn.onclick = () => { howToUseModal.style.display = 'none'; };
+
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      const img = new Image();
+      reader.onload = (e) => { img.src = e.target.result; };
+      img.onload = () => {
+        mainCanvas.width = img.width;
+        mainCanvas.height = img.height;
+        mainCtx.drawImage(img, 0, 0);
+        originalImageData = mainCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height);
+        output.textContent = 'Image loaded. Use "Toggle Magnifier" and hover over the image.';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    toggleMagnifierBtn.addEventListener('click', () => {
+      magnifierActive = !magnifierActive;
+      magnifierCanvas.style.display = magnifierActive ? 'block' : 'none';
+      output.textContent = magnifierActive ? 'Magnifier ON. Hover over the image.' : 'Magnifier OFF.';
+    });
+
+    mainCanvas.addEventListener('mousemove', (event) => {
+      if (!magnifierActive || !originalImageData) return;
+      const rect = mainCanvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      drawMagnifier(x, y);
+    });
+
+    function drawMagnifier(mouseX, mouseY) {
+      const magnification = parseFloat(magnificationRange.value);
+      const radius = magnifierCanvas.width / 2;
+      magnifierCanvas.style.left = mouseX - radius + 'px';
+      magnifierCanvas.style.top = mouseY - radius + 'px';
+
+      magnifierCtx.clearRect(0, 0, magnifierCanvas.width, magnifierCanvas.height);
+      magnifierCtx.save();
+      magnifierCtx.beginPath();
+      magnifierCtx.arc(radius, radius, radius, 0, 2 * Math.PI);
+      magnifierCtx.clip();
+
+      magnifierCtx.drawImage(
+        mainCanvas,
+        mouseX - radius / magnification,
+        mouseY - radius / magnification,
+        (magnifierCanvas.width / magnification),
+        (magnifierCanvas.height / magnification),
+        0, 0,
+        magnifierCanvas.width,
+        magnifierCanvas.height
+      );
+      magnifierCtx.restore();
+    }
+  </script>
+</body>
+</html>

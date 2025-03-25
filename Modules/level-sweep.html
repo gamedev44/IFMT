@@ -1,0 +1,229 @@
+<!-- Modules/level-sweep.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Level Sweep Tool - Image Forensics Multi-Tool" />
+  <meta name="keywords" content="Image Forensics, Level Sweep, Photo Analysis" />
+  <meta name="author" content="Risk" />
+  <title>Level Sweep - Image Forensics Multi-Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif; background-color: #f4f4f9;
+      margin: 0; padding: 0; display: flex; flex-direction: column;
+    }
+    header {
+      background-color: #333; color: #fff;
+      text-align: center; padding: 15px;
+    }
+    .container {
+      margin: 20px auto; width: 90%; max-width: 1000px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    #fileInput {
+      margin-bottom: 10px; cursor: pointer;
+    }
+    [data-tooltip] {
+      position: relative; cursor: help;
+    }
+    [data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; background: #333; color: #fff;
+      padding: 5px; border-radius: 4px;
+      top: 100%; left: 0; transform: translateY(5px);
+      z-index: 9999; font-size: 0.85rem;
+    }
+    canvas {
+      border: 1px solid #ccc; max-width: 100%;
+      display: block; margin-bottom: 10px;
+    }
+    .sliders {
+      display: flex; flex-direction: column; gap: 10px; max-width: 300px;
+    }
+    label { font-weight: bold; }
+    input[type="range"] { width: 100%; }
+    button {
+      padding: 10px 15px; background-color: #007bff;
+      color: #fff; border: none; border-radius: 5px;
+      cursor: pointer; margin-right: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .output {
+      background-color: #e8e8ee; padding: 10px;
+      border-radius: 5px; min-height: 40px;
+    }
+    .nav-buttons {
+      display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; z-index: 9999;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff; margin: 80px auto; padding: 20px;
+      width: 90%; max-width: 600px; border-radius: 6px;
+      position: relative; text-align: left; color: #000;
+    }
+    .modal-close {
+      position: absolute; top: 10px; right: 15px;
+      font-size: 20px; font-weight: bold; cursor: pointer;
+      background: none; border: none; color: #000;
+    }
+    .modal-header { font-size: 1.2em; margin-bottom: 10px; }
+    .modal-body { line-height: 1.4em; }
+    .modal-body p { margin: 0.5em 0; }
+    .modal-button {
+      margin-top: 15px; background-color: #007bff; color: #fff;
+      border: none; border-radius: 5px; padding: 8px 15px; cursor: pointer;
+    }
+    .modal-button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Level Sweep</h1>
+  </header>
+
+  <!-- How to Use Modal -->
+  <div id="howToUseModal" class="modal-overlay">
+    <div class="modal-content">
+      <button id="closeModal" class="modal-close">&times;</button>
+      <div class="modal-header">How to Use - Level Sweep</div>
+      <div class="modal-body">
+        <p><strong>Goal:</strong> Adjust brightness or contrast to reveal hidden artifacts or manipulations.</p>
+        <p>1. Load an image file.<br>
+           2. Tweak the <em>Sweep</em>, <em>Mid</em>, and <em>Opacity</em> sliders.<br>
+           3. Press "Apply Level Sweep" to see how the brightness distribution changes.<br>
+           4. "Reset Image" returns it to the original.</p>
+        <p>Tip: Extreme sweep or mid-range values can expose uniform patches or unnatural edges.</p>
+      </div>
+      <button id="closeModalBtn" class="modal-button">Close</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/*"
+      data-tooltip="Select an image for brightness/contrast sweeping"
+    />
+    <canvas id="canvas"></canvas>
+    <div class="sliders">
+      <label for="sweepRange" data-tooltip="Controls how strongly brightness is shifted from the midpoint">
+        Sweep (0-1)
+      </label>
+      <input type="range" id="sweepRange" min="0" max="1" step="0.01" value="0.5" />
+
+      <label for="midRange" data-tooltip="Midpoint around which brightness is adjusted">
+        Mid (0-255)
+      </label>
+      <input type="range" id="midRange" min="0" max="255" value="128" />
+
+      <label for="opacityRange" data-tooltip="Blends original pixel with the swept pixel; 1 = fully swept, 0 = original">
+        Opacity (0-1)
+      </label>
+      <input type="range" id="opacityRange" min="0" max="1" step="0.01" value="1" />
+    </div>
+    <div class="nav-buttons">
+      <button
+        id="applySweep"
+        data-tooltip="Apply your level-sweep settings to the image"
+      >
+        Apply Level Sweep
+      </button>
+      <button
+        id="resetButton"
+        data-tooltip="Restore the original unmodified image"
+      >
+        Reset Image
+      </button>
+      <button
+        id="howToUseBtn"
+        data-tooltip="See instructions on using Level Sweep"
+      >
+        How to Use
+      </button>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+
+  <script>
+    let originalImageData = null;
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const sweepRange = document.getElementById('sweepRange');
+    const midRange = document.getElementById('midRange');
+    const opacityRange = document.getElementById('opacityRange');
+    const applySweepButton = document.getElementById('applySweep');
+    const resetButton = document.getElementById('resetButton');
+    const output = document.getElementById('output');
+
+    // Modal
+    const howToUseModal = document.getElementById('howToUseModal');
+    const closeModal = document.getElementById('closeModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const howToUseBtn = document.getElementById('howToUseBtn');
+
+    howToUseBtn.onclick = () => { howToUseModal.style.display = 'block'; };
+    closeModal.onclick = () => { howToUseModal.style.display = 'none'; };
+    closeModalBtn.onclick = () => { howToUseModal.style.display = 'none'; };
+
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      const img = new Image();
+      reader.onload = (e) => { img.src = e.target.result; };
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        output.textContent = 'Image loaded. Adjust the sliders and apply Level Sweep.';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    applySweepButton.addEventListener('click', () => {
+      if (!originalImageData) {
+        output.textContent = 'No image loaded.';
+        return;
+      }
+      ctx.putImageData(originalImageData, 0, 0);
+      const sweepVal = parseFloat(sweepRange.value);
+      const midVal = parseInt(midRange.value, 10);
+      const opVal = parseFloat(opacityRange.value);
+
+      let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i+1], b = data[i+2];
+        let avg = (r + g + b) / 3;
+        // Shift brightness around midVal by sweepVal
+        avg = (avg - midVal) * sweepVal + midVal;
+        data[i]   = r * opVal + avg * (1 - opVal);
+        data[i+1] = g * opVal + avg * (1 - opVal);
+        data[i+2] = b * opVal + avg * (1 - opVal);
+      }
+      ctx.putImageData(imageData, 0, 0);
+      output.textContent = 'Level Sweep applied. Check for suspicious uniform areas or edges.';
+    });
+
+    resetButton.addEventListener('click', () => {
+      if (originalImageData) {
+        ctx.putImageData(originalImageData, 0, 0);
+        output.textContent = 'Image reset to original.';
+      }
+    });
+  </script>
+</body>
+</html>

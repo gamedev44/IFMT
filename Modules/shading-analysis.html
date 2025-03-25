@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Shading Analysis Tool - Image Forensics Multi-Tool" />
+  <meta name="keywords" content="Image Forensics, Shading Analysis, Photo Analysis" />
+  <meta name="author" content="Risk" />
+  <title>Shading Analysis - Image Forensics Multi-Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background-color: #333;
+      color: #fff;
+      text-align: center;
+      padding: 15px;
+    }
+    .container {
+      margin: 20px auto;
+      width: 90%;
+      max-width: 1000px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #fileInput {
+      margin-bottom: 10px;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      max-width: 100%;
+      display: block;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .output {
+      background-color: #e8e8ee;
+      padding: 10px;
+      border-radius: 5px;
+      min-height: 40px;
+    }
+    .nav-buttons {
+      margin-top: 10px;
+    }
+    /* Modal styles */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff;
+      margin: 15% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      max-width: 500px;
+      border-radius: 5px;
+    }
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Shading Analysis</h1>
+  </header>
+  <div class="container">
+    <input type="file" id="fileInput" accept="image/*" title="Select an image file for shading analysis" />
+    <canvas id="canvas" title="Image preview area"></canvas>
+    <div class="nav-buttons">
+      <button id="shadingButton" title="Analyze the image to display grayscale shading">Analyze Shading</button>
+      <button id="resetButton" title="Reset the image to original state">Reset Image</button>
+      <button id="howToUseButton" title="Click for instructions on how to use Shading Analysis tool">How To Use</button>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+  <!-- Modal -->
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <span id="closeModal" class="close" title="Close">&times;</span>
+      <h2>Shading Analysis - How To Use</h2>
+      <p>Select an image file and click "Analyze Shading" to convert the image to grayscale, highlighting lighting inconsistencies. Use "Reset Image" to revert to the original.</p>
+    </div>
+  </div>
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const shadingButton = document.getElementById('shadingButton');
+    const resetButton = document.getElementById('resetButton');
+    const output = document.getElementById('output');
+    const howToUseButton = document.getElementById('howToUseButton');
+    const modal = document.getElementById('modal');
+    const closeModal = document.getElementById('closeModal');
+    let originalImageData = null;
+
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      const img = new Image();
+      reader.onload = (e) => {
+        img.src = e.target.result;
+      };
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        output.textContent = 'Image loaded. Click "Analyze Shading" to view grayscale shading.';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    shadingButton.addEventListener('click', () => {
+      if (!originalImageData) {
+        output.textContent = 'No image loaded.';
+        return;
+      }
+      let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        data[i] = avg;
+        data[i + 1] = avg;
+        data[i + 2] = avg;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      output.textContent = 'Shading analysis completed. Observe lighting consistency.';
+    });
+
+    resetButton.addEventListener('click', () => {
+      if (originalImageData) {
+        ctx.putImageData(originalImageData, 0, 0);
+        output.textContent = 'Image reset to original.';
+      }
+    });
+
+    howToUseButton.addEventListener('click', () => {
+      modal.style.display = 'block';
+    });
+    closeModal.addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+    window.addEventListener('click', (event) => {
+      if (event.target === modal) {
+        modal.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

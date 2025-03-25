@@ -1,0 +1,179 @@
+<!-- Modules/geo-tags.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Geo Tags Tool - Image Forensics Multi-Tool" />
+  <meta name="keywords" content="Image Forensics, Geo Tags, Photo Analysis" />
+  <meta name="author" content="Risk" />
+  <title>Geo Tags - Image Forensics Multi-Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      margin: 0; padding: 0;
+      display: flex; flex-direction: column;
+    }
+    header {
+      background-color: #333; color: #fff;
+      text-align: center; padding: 15px;
+    }
+    .container {
+      margin: 20px auto; width: 90%; max-width: 1000px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    #fileInput {
+      margin-bottom: 10px;
+    }
+    #fileInput:hover {
+      cursor: pointer;
+    }
+    [data-tooltip] {
+      position: relative;
+      cursor: help;
+    }
+    [data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      background: #333; color: #fff;
+      padding: 5px; border-radius: 4px;
+      top: 100%; left: 0;
+      white-space: nowrap;
+      transform: translateY(5px);
+      z-index: 9999; font-size: 0.85rem;
+    }
+    .output {
+      background-color: #e8e8ee;
+      padding: 10px; border-radius: 5px;
+      min-height: 100px; white-space: pre-wrap;
+    }
+    button {
+      padding: 10px 15px; background-color: #007bff;
+      color: #fff; border: none; border-radius: 5px;
+      cursor: pointer; margin-right: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .nav-buttons {
+      margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    /* Modal Styles */
+    .modal-overlay {
+      display: none; /* hidden by default */
+      position: fixed; z-index: 9999;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff; color: #000;
+      margin: 80px auto; padding: 20px;
+      width: 90%; max-width: 600px;
+      border-radius: 6px; position: relative; text-align: left;
+    }
+    .modal-close {
+      position: absolute; top: 10px; right: 15px;
+      font-size: 20px; font-weight: bold; cursor: pointer;
+      background: none; border: none; color: #000;
+    }
+    .modal-header { font-size: 1.2em; margin-bottom: 10px; }
+    .modal-body { line-height: 1.4em; }
+    .modal-body p { margin: 0.5em 0; }
+    .modal-button {
+      margin-top: 15px; background-color: #007bff; color: #fff;
+      border: none; border-radius: 5px; padding: 8px 15px; cursor: pointer;
+    }
+    .modal-button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Geo Tags</h1>
+  </header>
+
+  <!-- "How to Use" Modal -->
+  <div id="howToUseModal" class="modal-overlay">
+    <div class="modal-content">
+      <button id="closeModal" class="modal-close">&times;</button>
+      <div class="modal-header">How to Use - Geo Tags</div>
+      <div class="modal-body">
+        <p><strong>Goal:</strong> Extract any embedded GPS data (latitude/longitude) from the image’s metadata.</p>
+        <p>1. Click <em>Select File</em> to choose an image.<br>
+           2. Press <em>Extract Geo Tags</em> to scan for GPS metadata.<br>
+           3. If found, latitude and longitude appear below.</p>
+        <p>Tip: Some images may not contain any GPS metadata. This approach is basic and may not parse all EXIF structures.</p>
+      </div>
+      <button id="closeModalBtn" class="modal-button">Close</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/*"
+      data-tooltip="Select an image to scan for GPS metadata"
+    />
+    <div class="nav-buttons">
+      <button
+        id="geoButton"
+        data-tooltip="Click to attempt reading embedded GPS info"
+      >
+        Extract Geo Tags
+      </button>
+      <button
+        id="howToUseBtn"
+        data-tooltip="Opens instructions for using Geo Tags"
+      >
+        How to Use
+      </button>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const geoButton = document.getElementById('geoButton');
+    const output = document.getElementById('output');
+
+    // Modal elements
+    const howToUseModal = document.getElementById('howToUseModal');
+    const closeModal = document.getElementById('closeModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const howToUseBtn = document.getElementById('howToUseBtn');
+
+    howToUseBtn.onclick = () => { howToUseModal.style.display = 'block'; };
+    closeModal.onclick = () => { howToUseModal.style.display = 'none'; };
+    closeModalBtn.onclick = () => { howToUseModal.style.display = 'none'; };
+
+    geoButton.addEventListener('click', () => {
+      const file = fileInput.files[0];
+      if (!file) {
+        output.textContent = 'No file selected.';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const arrayBuffer = e.target.result;
+        const view = new DataView(arrayBuffer);
+        let rawData = '';
+        for (let i = 0; i < view.byteLength; i++) {
+          rawData += String.fromCharCode(view.getUint8(i));
+        }
+        // Basic scanning for "GPSLatitude" / "GPSLongitude" (very naive approach)
+        let latMatch = rawData.match(/GPSLatitude="([^"]+)"/);
+        let lonMatch = rawData.match(/GPSLongitude="([^"]+)"/);
+        if (latMatch && lonMatch) {
+          output.textContent = 'Found Geo Tags:\nLatitude: ' + latMatch[1] + '\nLongitude: ' + lonMatch[1];
+        } else {
+          output.textContent = 'No Geo Tags found.';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
+</html>

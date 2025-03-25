@@ -1,0 +1,16 @@
+{
+  "dependencies": {
+    "@techstark/opencv-js": "^4.10.0-release.1",
+    "jsfeat": "^0.0.8"
+  },
+  "name": "ifmt",
+  "description": "Image Forensics Multi-Tool by: Risk",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

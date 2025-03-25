@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="PocketKnife - A simple tool for brightness, contrast, and gamma adjustments." />
+  <meta name="keywords" content="Image Forensics, PocketKnife, Brightness, Contrast, Gamma" />
+  <meta name="author" content="Risk" />
+  <title>PocketKnife - Image Forensics Multi-Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background-color: #333;
+      color: #fff;
+      text-align: center;
+      padding: 15px;
+    }
+    .container {
+      margin: 20px auto;
+      width: 90%;
+      max-width: 1000px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #fileInput {
+      margin-bottom: 10px;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      max-width: 100%;
+      display: block;
+      margin-bottom: 10px;
+    }
+    .sliders {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 300px;
+    }
+    label {
+      font-weight: bold;
+    }
+    input[type="range"] {
+      width: 100%;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .nav-buttons {
+      margin-top: 10px;
+    }
+    .output {
+      background-color: #e8e8ee;
+      padding: 10px;
+      border-radius: 5px;
+      min-height: 40px;
+      white-space: pre-wrap;
+    }
+    /* Modal styles */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff;
+      margin: 15% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      max-width: 500px;
+      border-radius: 5px;
+    }
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PocketKnife</h1>
+  </header>
+  <div class="container">
+    <input type="file" id="fileInput" accept="image/*" title="Select an image file for adjustment" />
+    <canvas id="canvas" title="Image preview area"></canvas>
+    <div class="sliders">
+      <label for="brightnessRange" title="Adjust brightness (-100 to 100)">Brightness (-100 to 100)</label>
+      <input type="range" id="brightnessRange" min="-100" max="100" step="1" value="0" title="Drag to adjust brightness" />
+      <label for="contrastRange" title="Adjust contrast (-100 to 100)">Contrast (-100 to 100)</label>
+      <input type="range" id="contrastRange" min="-100" max="100" step="1" value="0" title="Drag to adjust contrast" />
+      <label for="gammaRange" title="Adjust gamma (0.1 to 3)">Gamma (0.1 to 3)</label>
+      <input type="range" id="gammaRange" min="0.1" max="3" step="0.1" value="1" title="Drag to adjust gamma" />
+    </div>
+    <div class="nav-buttons">
+      <button id="applyButton" title="Apply brightness, contrast, and gamma adjustments">Apply Adjustments</button>
+      <button id="resetButton" title="Reset the image to original state">Reset Image</button>
+      <button id="howToUseButton" title="Click for instructions on how to use PocketKnife tool">How To Use</button>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+  <!-- Modal -->
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <span id="closeModal" class="close" title="Close">&times;</span>
+      <h2>PocketKnife - How To Use</h2>
+      <p>Select an image, adjust the sliders for brightness, contrast, and gamma, then click "Apply Adjustments". Use "Reset Image" to revert changes.</p>
+    </div>
+  </div>
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const output = document.getElementById('output');
+    const brightnessRange = document.getElementById('brightnessRange');
+    const contrastRange = document.getElementById('contrastRange');
+    const gammaRange = document.getElementById('gammaRange');
+    const applyButton = document.getElementById('applyButton');
+    const resetButton = document.getElementById('resetButton');
+    const howToUseButton = document.getElementById('howToUseButton');
+    const modal = document.getElementById('modal');
+    const closeModal = document.getElementById('closeModal');
+    let originalImageData = null;
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      const img = new Image();
+      reader.onload = (e) => {
+        img.src = e.target.result;
+      };
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        output.textContent = 'Image loaded. Adjust sliders and click "Apply Adjustments".';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    applyButton.addEventListener('click', () => {
+      if (!originalImageData) {
+        output.textContent = 'No image loaded.';
+        return;
+      }
+      applyAdjustments();
+      output.textContent = 'Adjustments applied. You can tweak sliders again or reset.';
+    });
+
+    resetButton.addEventListener('click', () => {
+      if (originalImageData) {
+        ctx.putImageData(originalImageData, 0, 0);
+        output.textContent = 'Image reset to original.';
+      }
+    });
+
+    function applyAdjustments() {
+      ctx.putImageData(originalImageData, 0, 0);
+      let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let data = imageData.data;
+      const brightnessVal = parseInt(brightnessRange.value, 10);
+      const cVal = parseInt(contrastRange.value, 10);
+      const contrastFactor = (259 * (cVal + 255)) / (255 * (259 - cVal));
+      const gammaVal = parseFloat(gammaRange.value);
+      for (let i = 0; i < data.length; i += 4) {
+        let r = data[i];
+        let g = data[i + 1];
+        let b = data[i + 2];
+        r += brightnessVal;
+        g += brightnessVal;
+        b += brightnessVal;
+        r = contrastFactor * (r - 128) + 128;
+        g = contrastFactor * (g - 128) + 128;
+        b = contrastFactor * (b - 128) + 128;
+        r = 255 * Math.pow(r / 255, 1 / gammaVal);
+        g = 255 * Math.pow(g / 255, 1 / gammaVal);
+        b = 255 * Math.pow(b / 255, 1 / gammaVal);
+        data[i]     = clamp(r);
+        data[i + 1] = clamp(g);
+        data[i + 2] = clamp(b);
+      }
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function clamp(value) {
+      return Math.min(255, Math.max(0, value));
+    }
+
+    howToUseButton.addEventListener('click', () => {
+      modal.style.display = 'block';
+    });
+    closeModal.addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+    window.addEventListener('click', (event) => {
+      if (event.target === modal) {
+        modal.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

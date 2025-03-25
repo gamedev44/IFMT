@@ -1,0 +1,394 @@
+<!-- Modules/clone-detection.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Clone Detection Tool - Image Forensics Multi-Tool" />
+  <meta name="keywords" content="Image Forensics, Clone Detection, Photo Analysis" />
+  <meta name="author" content="Risk" />
+  <title>Clone Detection - Image Forensics Multi-Tool</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background-color: #f4f4f9; font-family: Arial, sans-serif;
+      display: flex; flex-direction: column;
+    }
+    header {
+      background-color: #333; color: #fff;
+      text-align: center; padding: 15px; position: relative;
+    }
+    .container {
+      margin: 20px auto; width: 90%; max-width: 1000px;
+      display: flex; flex-direction: column; gap: 15px;
+    }
+    #fileInput {
+      margin-bottom: 10px; cursor: pointer;
+    }
+    [data-tooltip] {
+      position: relative; cursor: help;
+    }
+    [data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; background: #333; color: #fff;
+      padding: 5px; border-radius: 4px;
+      top: 100%; left: 0; transform: translateY(5px);
+      z-index: 9999; font-size: 0.85rem;
+    }
+    canvas {
+      border: 1px solid #ccc; max-width: 100%;
+      display: block; margin-bottom: 10px;
+    }
+    .sliders {
+      display: flex; flex-direction: column; gap: 10px; max-width: 300px;
+    }
+    label { font-weight: bold; margin-bottom: 5px; }
+    input[type="range"] { width: 100%; }
+    button {
+      padding: 10px 15px; background-color: #007bff;
+      color: #fff; border: none; border-radius: 5px;
+      cursor: pointer; margin-right: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .output {
+      margin-top: 10px; white-space: pre-wrap;
+      background-color: #e8e8ee; padding: 10px;
+      border-radius: 5px; min-height: 40px;
+    }
+    .nav-buttons {
+      margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    /* Warning Modal */
+    .modal-overlay {
+      display: block; position: fixed; z-index: 9999;
+      left: 0; top: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff; margin: 100px auto; padding: 20px;
+      width: 90%; max-width: 600px; border-radius: 6px;
+      position: relative; text-align: left;
+    }
+    .modal-close {
+      position: absolute; top: 10px; right: 15px;
+      font-size: 20px; font-weight: bold; cursor: pointer;
+      background: none; border: none; color: #000;
+    }
+    .modal-header {
+      font-size: 1.2em; margin-bottom: 10px;
+    }
+    .modal-body { line-height: 1.4em; }
+    .modal-body p { margin: 0.5em 0; }
+    .modal-button {
+      margin-top: 15px; background-color: #007bff; color: #fff;
+      border: none; border-radius: 5px; padding: 8px 15px; cursor: pointer;
+    }
+    .modal-button:hover {
+      background-color: #0056b3;
+    }
+
+    /* "How to Use" second modal */
+    #howToUseModal {
+      display: none; position: fixed; z-index: 9999;
+      left: 0; top: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .howToUse-content {
+      background-color: #fff; margin: 80px auto; padding: 20px;
+      width: 90%; max-width: 600px; border-radius: 6px;
+      position: relative; text-align: left;
+    }
+    .howToUse-close {
+      position: absolute; top: 10px; right: 15px;
+      font-size: 20px; font-weight: bold; cursor: pointer;
+      background: none; border: none; color: #000;
+    }
+    .howToUse-header {
+      font-size: 1.2em; margin-bottom: 10px;
+    }
+    .howToUse-body { line-height: 1.4em; }
+    .howToUse-body p { margin: 0.5em 0; }
+    .howToUse-button {
+      margin-top: 15px; background-color: #007bff; color: #fff;
+      border: none; border-radius: 5px; padding: 8px 15px; cursor: pointer;
+    }
+    .howToUse-button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Clone Detection</h1>
+  </header>
+
+  <!-- Memory Warning Modal (shown by default) -->
+  <div id="warningModal" class="modal-overlay">
+    <div class="modal-content">
+      <button id="closeModal" class="modal-close">&times;</button>
+      <div class="modal-header">⚠️ Warning ⚠️</div>
+      <div class="modal-body">
+        <p>This module can be memory-intensive and may crash your browser, especially with large images. We recommend using a separate browser window if possible.</p>
+        <p>It’s also in an early stage, so errors or false positives may occur. Please remember I'm a single developer building this out of passion, so advanced logic is incomplete. Feedback is welcome!</p>
+      </div>
+      <button id="proceedBtn" class="modal-button">I Understand</button>
+    </div>
+  </div>
+
+  <!-- "How to Use" Modal -->
+  <div id="howToUseModal">
+    <div class="howToUse-content">
+      <button id="closeHowToUse" class="howToUse-close">&times;</button>
+      <div class="howToUse-header">How to Use - Clone Detection</div>
+      <div class="howToUse-body">
+        <p><strong>Goal:</strong> Identify repeated/duplicated patches in the image that may indicate cloning.</p>
+        <p>1. Select an image. Adjust the <em>Minimum Similarity</em>, <em>Minimal Detail</em>, and <em>Patch Size</em> sliders.<br>
+           2. Click <em>Run Clone Detection</em> to highlight suspected cloned regions in pink.<br>
+           3. <em>Reset Image</em> reverts to the original. Look out for large pink areas that might indicate copy-paste edits.</p>
+        <p>Tip: Lower similarity can reveal more potential clones (including false positives). Higher detail filters out low-contrast areas.</p>
+      </div>
+      <button id="closeHowToUseBtn" class="howToUse-button">Close</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/*"
+      data-tooltip="Choose an image to check for cloned patches"
+    />
+    <canvas id="canvas"></canvas>
+    <div class="sliders">
+      <label for="similarityRange" data-tooltip="Sets how similar patches must be (0=very lenient, 100=very strict)">
+        Minimum Similarity (0-100)
+      </label>
+      <input type="range" id="similarityRange" min="0" max="100" value="50" />
+
+      <label for="detailRange" data-tooltip="Skips patches with average edge detail below this threshold (0=all, 100=only high-detail patches)">
+        Minimal Detail (0-100)
+      </label>
+      <input type="range" id="detailRange" min="0" max="100" value="50" />
+
+      <label for="clusterSizeRange" data-tooltip="Patch size in pixels for shape comparison (small=slow, large=less accurate)">
+        Patch Size (1-20)
+      </label>
+      <input type="range" id="clusterSizeRange" min="1" max="20" value="8" />
+    </div>
+
+    <div class="nav-buttons">
+      <button
+        id="runDetection"
+        data-tooltip="Execute the clone detection algorithm with current slider settings"
+      >
+        Run Clone Detection
+      </button>
+      <button
+        id="resetButton"
+        data-tooltip="Restore the original image"
+      >
+        Reset Image
+      </button>
+      <button
+        id="howToUseBtn"
+        data-tooltip="View usage instructions for Clone Detection"
+      >
+        How to Use
+      </button>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+
+  <script>
+    // Warning Modal
+    const warningModal = document.getElementById('warningModal');
+    const closeModal = document.getElementById('closeModal');
+    const proceedBtn = document.getElementById('proceedBtn');
+    closeModal.onclick = () => { warningModal.style.display = 'none'; };
+    proceedBtn.onclick = () => { warningModal.style.display = 'none'; };
+
+    // How to Use Modal
+    const howToUseModal = document.getElementById('howToUseModal');
+    const closeHowToUse = document.getElementById('closeHowToUse');
+    const closeHowToUseBtn = document.getElementById('closeHowToUseBtn');
+    const howToUseBtn = document.getElementById('howToUseBtn');
+    howToUseBtn.onclick = () => { howToUseModal.style.display = 'block'; };
+    closeHowToUse.onclick = () => { howToUseModal.style.display = 'none'; };
+    closeHowToUseBtn.onclick = () => { howToUseModal.style.display = 'none'; };
+
+    let originalImageData = null;
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const output = document.getElementById('output');
+
+    const similarityRange = document.getElementById('similarityRange');
+    const detailRange = document.getElementById('detailRange');
+    const clusterSizeRange = document.getElementById('clusterSizeRange');
+
+    const runDetectionBtn = document.getElementById('runDetection');
+    const resetButton = document.getElementById('resetButton');
+
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      const img = new Image();
+      reader.onload = (e) => { img.src = e.target.result; };
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        output.textContent = 'Image loaded. Adjust sliders and click "Run Clone Detection".';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    runDetectionBtn.addEventListener('click', () => {
+      if (!originalImageData) {
+        output.textContent = 'No image loaded.';
+        return;
+      }
+      runCloneDetection();
+    });
+
+    resetButton.addEventListener('click', () => {
+      if (originalImageData) {
+        ctx.putImageData(originalImageData, 0, 0);
+        output.textContent = 'Image reset to original.';
+      }
+    });
+
+    function runCloneDetection() {
+      const similarityVal = parseInt(similarityRange.value, 10);
+      const detailVal = parseInt(detailRange.value, 10);
+      const patchSize = parseInt(clusterSizeRange.value, 10);
+
+      // If similarity=100 => very strict => low shapeDistanceThreshold
+      // If similarity=0   => very lenient => high shapeDistanceThreshold
+      const shapeDistanceThreshold = (100 - similarityVal) * 20;
+      const detailThreshold = detailVal / 2;
+
+      ctx.putImageData(originalImageData, 0, 0);
+      const highlightData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const highlightArr = highlightData.data;
+
+      const width = canvas.width;
+      const height = canvas.height;
+      const originalArr = originalImageData.data;
+
+      let patches = [];
+      for (let py = 0; py < height; py += patchSize) {
+        for (let px = 0; px < width; px += patchSize) {
+          const descriptor = computePatchSobelDescriptor(px, py, patchSize, patchSize, originalArr, width, height);
+          if (!descriptor) continue;
+          let sumMag = 0;
+          for (let i = 0; i < descriptor.length; i++) {
+            sumMag += descriptor[i];
+          }
+          const avgEdge = sumMag / descriptor.length;
+          patches.push({ x: px, y: py, w: patchSize, h: patchSize, descriptor, avgEdge });
+        }
+      }
+
+      const highlightIndices = new Set();
+
+      for (let i = 0; i < patches.length; i++) {
+        const p1 = patches[i];
+        if (p1.avgEdge < detailThreshold) continue;
+        for (let j = i + 1; j < patches.length; j++) {
+          const p2 = patches[j];
+          if (p2.avgEdge < detailThreshold) continue;
+          const diff = descriptorDistance(p1.descriptor, p2.descriptor);
+          if (diff < shapeDistanceThreshold) {
+            highlightIndices.add(i);
+            highlightIndices.add(j);
+          }
+        }
+      }
+
+      highlightIndices.forEach(idx => {
+        const p = patches[idx];
+        highlightPatch(p.x, p.y, p.w, p.h, highlightArr, width);
+      });
+
+      ctx.putImageData(highlightData, 0, 0);
+      output.textContent = `Clone detection complete. Patches with shape distance < ${shapeDistanceThreshold} and average edge >= ${detailThreshold} were marked.`;
+    }
+
+    function computePatchSobelDescriptor(startX, startY, w, h, dataArr, imgWidth, imgHeight) {
+      let patch = [];
+      for (let y = 0; y < h; y++) {
+        let row = [];
+        for (let x = 0; x < w; x++) {
+          const px = startX + x;
+          const py = startY + y;
+          if (px >= imgWidth || py >= imgHeight) {
+            row.push(0);
+          } else {
+            const idx = (py * imgWidth + px) * 4;
+            const r = dataArr[idx];
+            const g = dataArr[idx + 1];
+            const b = dataArr[idx + 2];
+            const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+            row.push(gray);
+          }
+        }
+        patch.push(row);
+      }
+      let descriptor = [];
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const gx =
+            (-1 * patch[y - 1][x - 1]) +
+            ( 1 * patch[y - 1][x + 1]) +
+            (-2 * patch[y][x - 1]) +
+            ( 2 * patch[y][x + 1]) +
+            (-1 * patch[y + 1][x - 1]) +
+            ( 1 * patch[y + 1][x + 1]);
+          const gy =
+            ( 1 * patch[y - 1][x - 1]) +
+            ( 2 * patch[y - 1][x]) +
+            ( 1 * patch[y - 1][x + 1]) +
+            (-1 * patch[y + 1][x - 1]) +
+            (-2 * patch[y + 1][x]) +
+            (-1 * patch[y + 1][x + 1]);
+          const mag = Math.sqrt(gx * gx + gy * gy);
+          descriptor.push(mag);
+        }
+      }
+      if (!descriptor.length) return null;
+      return descriptor;
+    }
+
+    function descriptorDistance(descA, descB) {
+      if (descA.length !== descB.length) {
+        return 9999999;
+      }
+      let sum = 0;
+      for (let i = 0; i < descA.length; i++) {
+        sum += Math.abs(descA[i] - descB[i]);
+      }
+      return sum;
+    }
+
+    function highlightPatch(x, y, w, h, highlightArr, imgWidth) {
+      const alpha = 0.4;
+      for (let py = y; py < y + h; py++) {
+        for (let px = x; px < x + w; px++) {
+          const idx = (py * imgWidth + px) * 4;
+          const oldR = highlightArr[idx];
+          const oldG = highlightArr[idx + 1];
+          const oldB = highlightArr[idx + 2];
+          highlightArr[idx]     = oldR * (1 - alpha) + 255 * alpha;
+          highlightArr[idx + 1] = oldG * (1 - alpha);
+          highlightArr[idx + 2] = oldB * (1 - alpha) + 255 * alpha;
+        }
+      }
+    }
+  </script>
+</body>
+</html>

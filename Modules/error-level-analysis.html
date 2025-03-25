@@ -1,0 +1,175 @@
+<!-- Modules/error-level-analysis.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Error Level Analysis Tool - Image Forensics Multi-Tool" />
+  <meta name="keywords" content="Image Forensics, ELA, Photo Analysis" />
+  <meta name="author" content="Risk" />
+  <title>Error Level Analysis - Image Forensics Multi-Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background-color: #333;
+      color: #fff;
+      text-align: center;
+      padding: 15px;
+    }
+    .container {
+      margin: 20px auto;
+      width: 90%;
+      max-width: 1000px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #fileInput {
+      margin-bottom: 10px;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      max-width: 100%;
+      display: block;
+      margin-bottom: 10px;
+    }
+    .sliders, .buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    label {
+      font-weight: bold;
+    }
+    input[type="range"] {
+      width: 150px;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .output {
+      background-color: #e8e8ee;
+      padding: 10px;
+      border-radius: 5px;
+      min-height: 40px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Error Level Analysis</h1>
+  </header>
+  <div class="container">
+    <input type="file" id="fileInput" accept="image/*" />
+    <div class="sliders">
+      <label for="compressionRange">JPEG Compression (0-100)</label>
+      <input type="range" id="compressionRange" min="0" max="100" value="70" />
+    </div>
+    <canvas id="canvas"></canvas>
+    <div class="buttons">
+      <button id="elaButton">Run ELA</button>
+      <button id="resetButton">Reset Image</button>
+      <button onclick="window.location.href='../index.html'">Return to Index</button>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const output = document.getElementById('output');
+    const elaButton = document.getElementById('elaButton');
+    const resetButton = document.getElementById('resetButton');
+    const compressionRange = document.getElementById('compressionRange');
+    let originalImageData = null;
+
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      const img = new Image();
+      reader.onload = (e) => {
+        img.src = e.target.result;
+      };
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        output.textContent = 'Image loaded. Adjust the JPEG compression slider and run ELA.';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    elaButton.addEventListener('click', () => {
+      if (!originalImageData) {
+        output.textContent = 'No image loaded.';
+        return;
+      }
+      const compressionValue = parseInt(compressionRange.value, 10);
+      runELA(compressionValue);
+    });
+
+    resetButton.addEventListener('click', () => {
+      if (originalImageData) {
+        ctx.putImageData(originalImageData, 0, 0);
+        output.textContent = 'Image reset to original.';
+      }
+    });
+
+    function runELA(compressionValue) {
+      // Put the original data back on the canvas
+      ctx.putImageData(originalImageData, 0, 0);
+      // Create a temporary canvas to compress the image
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      tempCtx.drawImage(canvas, 0, 0);
+
+      tempCanvas.toBlob(
+        (blob) => {
+          const fr = new FileReader();
+          fr.onload = () => {
+            const compImg = new Image();
+            compImg.src = fr.result;
+            compImg.onload = () => {
+              tempCtx.drawImage(compImg, 0, 0);
+              const compImageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+
+              // Subtract compressed from original
+              const elaData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              for (let i = 0; i < elaData.data.length; i += 4) {
+                elaData.data[i] = Math.abs(elaData.data[i] - compImageData.data[i]);
+                elaData.data[i + 1] = Math.abs(elaData.data[i + 1] - compImageData.data[i + 1]);
+                elaData.data[i + 2] = Math.abs(elaData.data[i + 2] - compImageData.data[i + 2]);
+              }
+              ctx.putImageData(elaData, 0, 0);
+              output.textContent =
+                'ELA completed. Bright regions may indicate areas of manipulation or higher compression.';
+            };
+          };
+          fr.readAsDataURL(blob);
+        },
+        'image/jpeg',
+        compressionValue / 100
+      );
+    }
+  </script>
+</body>
+</html>

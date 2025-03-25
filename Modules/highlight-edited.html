@@ -1,0 +1,203 @@
+<!-- Modules/highlight-edited.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Highlight Edited Pixels - Image Forensics Multi-Tool" />
+  <meta name="keywords" content="Image Forensics, Edited Pixels, Photo Analysis" />
+  <meta name="author" content="Risk" />
+  <title>Highlight Edited Pixels - Image Forensics Multi-Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      margin: 0; padding: 0;
+      display: flex; flex-direction: column;
+    }
+    header {
+      background-color: #333; color: #fff;
+      text-align: center; padding: 15px;
+    }
+    .container {
+      margin: 20px auto; width: 90%; max-width: 1000px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    #fileInput {
+      margin-bottom: 10px; cursor: pointer;
+    }
+    [data-tooltip] {
+      position: relative; cursor: help;
+    }
+    [data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; background: #333; color: #fff;
+      padding: 5px; border-radius: 4px;
+      top: 100%; left: 0; transform: translateY(5px);
+      z-index: 9999; font-size: 0.85rem;
+    }
+    canvas {
+      border: 1px solid #ccc; max-width: 100%;
+      display: block; margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 15px; background-color: #007bff;
+      color: #fff; border: none; border-radius: 5px;
+      cursor: pointer; margin-right: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .output {
+      background-color: #e8e8ee; padding: 10px;
+      border-radius: 5px; min-height: 40px;
+    }
+    .nav-buttons {
+      display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; z-index: 9999;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff; margin: 80px auto; padding: 20px;
+      width: 90%; max-width: 600px; border-radius: 6px;
+      position: relative; text-align: left; color: #000;
+    }
+    .modal-close {
+      position: absolute; top: 10px; right: 15px;
+      font-size: 20px; font-weight: bold; cursor: pointer;
+      background: none; border: none; color: #000;
+    }
+    .modal-header { font-size: 1.2em; margin-bottom: 10px; }
+    .modal-body { line-height: 1.4em; }
+    .modal-body p { margin: 0.5em 0; }
+    .modal-button {
+      margin-top: 15px; background-color: #007bff; color: #fff;
+      border: none; border-radius: 5px; padding: 8px 15px; cursor: pointer;
+    }
+    .modal-button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Highlight Edited Pixels</h1>
+  </header>
+
+  <!-- How to Use Modal -->
+  <div id="howToUseModal" class="modal-overlay">
+    <div class="modal-content">
+      <button id="closeModal" class="modal-close">&times;</button>
+      <div class="modal-header">How to Use - Highlight Edited Pixels</div>
+      <div class="modal-body">
+        <p><strong>Goal:</strong> Compare current canvas pixels to the original to reveal changes in red.</p>
+        <p>1. Select an image file. The script stores its original pixel data.<br>
+           2. Make or load modifications. Then click "Highlight Edited Pixels" to see any differences in red.<br>
+           3. Reset if you want to discard changes and restore the original.</p>
+        <p>Tip: If you see large patches of red, it means those pixels have changed from the original load.</p>
+      </div>
+      <button id="closeModalBtn" class="modal-button">Close</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/*"
+      data-tooltip="Load an image whose modifications you want to highlight"
+    />
+    <canvas id="canvas"></canvas>
+    <div class="nav-buttons">
+      <button
+        id="highlightEditedButton"
+        data-tooltip="Highlight any pixels that differ from the originally loaded image"
+      >
+        Highlight Edited Pixels
+      </button>
+      <button
+        id="resetButton"
+        data-tooltip="Revert back to the originally loaded image"
+      >
+        Reset Image
+      </button>
+      <button
+        id="howToUseBtn"
+        data-tooltip="View instructions for highlighting edited pixels"
+      >
+        How to Use
+      </button>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+
+  <script>
+    let originalImageData = null;
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const highlightEditedButton = document.getElementById('highlightEditedButton');
+    const resetButton = document.getElementById('resetButton');
+    const output = document.getElementById('output');
+
+    // Modal
+    const howToUseModal = document.getElementById('howToUseModal');
+    const closeModal = document.getElementById('closeModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const howToUseBtn = document.getElementById('howToUseBtn');
+
+    howToUseBtn.onclick = () => { howToUseModal.style.display = 'block'; };
+    closeModal.onclick = () => { howToUseModal.style.display = 'none'; };
+    closeModalBtn.onclick = () => { howToUseModal.style.display = 'none'; };
+
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      const img = new Image();
+      reader.onload = (e) => { img.src = e.target.result; };
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        output.textContent = 'Image loaded. Click "Highlight Edited Pixels" after making changes.';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    highlightEditedButton.addEventListener('click', () => {
+      if (!originalImageData) {
+        output.textContent = 'No image loaded.';
+        return;
+      }
+      let currentData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let data = currentData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        if (
+          data[i]     !== originalImageData.data[i]     ||
+          data[i + 1] !== originalImageData.data[i + 1] ||
+          data[i + 2] !== originalImageData.data[i + 2]
+        ) {
+          data[i]   = 255; // R
+          data[i+1] = 0;   // G
+          data[i+2] = 0;   // B
+        }
+      }
+      ctx.putImageData(currentData, 0, 0);
+      output.textContent = 'Edited pixels highlighted in red.';
+    });
+
+    resetButton.addEventListener('click', () => {
+      if (originalImageData) {
+        ctx.putImageData(originalImageData, 0, 0);
+        output.textContent = 'Image reset to original.';
+      }
+    });
+  </script>
+</body>
+</html>

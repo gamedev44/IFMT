@@ -1,0 +1,200 @@
+<!-- Modules/heatmap-view.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Heatmap View Tool - Image Forensics Multi-Tool" />
+  <meta name="keywords" content="Image Forensics, Heatmap, Photo Analysis" />
+  <meta name="author" content="Risk" />
+  <title>Heatmap View - Image Forensics Multi-Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      margin: 0; padding: 0;
+      display: flex; flex-direction: column;
+    }
+    header {
+      background-color: #333; color: #fff;
+      text-align: center; padding: 15px;
+    }
+    .container {
+      margin: 20px auto; width: 90%; max-width: 1000px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    #fileInput {
+      margin-bottom: 10px; cursor: pointer;
+    }
+    [data-tooltip] {
+      position: relative; cursor: help;
+    }
+    [data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; background: #333; color: #fff;
+      padding: 5px; border-radius: 4px;
+      top: 100%; left: 0; transform: translateY(5px);
+      z-index: 9999; font-size: 0.85rem;
+    }
+    canvas {
+      border: 1px solid #ccc; max-width: 100%;
+      display: block; margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 15px; background-color: #007bff;
+      color: #fff; border: none; border-radius: 5px;
+      cursor: pointer; margin-right: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .output {
+      background-color: #e8e8ee; padding: 10px;
+      border-radius: 5px; min-height: 40px;
+    }
+    .nav-buttons {
+      display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; z-index: 9999;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff; margin: 80px auto; padding: 20px;
+      width: 90%; max-width: 600px; border-radius: 6px;
+      position: relative; text-align: left; color: #000;
+    }
+    .modal-close {
+      position: absolute; top: 10px; right: 15px;
+      font-size: 20px; font-weight: bold; cursor: pointer;
+      background: none; border: none; color: #000;
+    }
+    .modal-header { font-size: 1.2em; margin-bottom: 10px; }
+    .modal-body { line-height: 1.4em; }
+    .modal-body p { margin: 0.5em 0; }
+    .modal-button {
+      margin-top: 15px; background-color: #007bff; color: #fff;
+      border: none; border-radius: 5px; padding: 8px 15px; cursor: pointer;
+    }
+    .modal-button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Heatmap View</h1>
+  </header>
+
+  <!-- How to Use Modal -->
+  <div id="howToUseModal" class="modal-overlay">
+    <div class="modal-content">
+      <button id="closeModal" class="modal-close">&times;</button>
+      <div class="modal-header">How to Use - Heatmap View</div>
+      <div class="modal-body">
+        <p><strong>Goal:</strong> Convert image intensity to a heatmap-like coloring.</p>
+        <p>1. Choose an image file.<br>
+           2. Click "Apply Heatmap" to transform pixel intensities.<br>
+           3. Brighter areas become more red; darker areas shift to blue.<br>
+           4. Use "Reset Image" to revert.</p>
+        <p>Tip: This is a simplistic heatmap; advanced methods can highlight noise or artifacts more effectively.</p>
+      </div>
+      <button id="closeModalBtn" class="modal-button">Close</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/*"
+      data-tooltip="Select an image to apply a heatmap transform"
+    />
+    <canvas id="canvas"></canvas>
+    <div class="nav-buttons">
+      <button
+        id="heatmapButton"
+        data-tooltip="Convert current image into a basic heatmap"
+      >
+        Apply Heatmap
+      </button>
+      <button
+        id="resetButton"
+        data-tooltip="Revert any changes and restore original image"
+      >
+        Reset Image
+      </button>
+      <button
+        id="howToUseBtn"
+        data-tooltip="Learn how this heatmap transformation works"
+      >
+        How to Use
+      </button>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+
+  <script>
+    let originalImageData = null;
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const heatmapButton = document.getElementById('heatmapButton');
+    const resetButton = document.getElementById('resetButton');
+    const output = document.getElementById('output');
+
+    // Modal
+    const howToUseModal = document.getElementById('howToUseModal');
+    const closeModal = document.getElementById('closeModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const howToUseBtn = document.getElementById('howToUseBtn');
+
+    howToUseBtn.onclick = () => { howToUseModal.style.display = 'block'; };
+    closeModal.onclick = () => { howToUseModal.style.display = 'none'; };
+    closeModalBtn.onclick = () => { howToUseModal.style.display = 'none'; };
+
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      const img = new Image();
+      reader.onload = (e) => { img.src = e.target.result; };
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        output.textContent = 'Image loaded. Click "Apply Heatmap" to visualize intensity.';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    heatmapButton.addEventListener('click', () => {
+      if (!originalImageData) {
+        output.textContent = 'No image loaded.';
+        return;
+      }
+      let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const intensity = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        // Simple "heatmap": Red channel = intensity, Blue channel = 255 - intensity, G=0
+        data[i]   = intensity;       // R
+        data[i+1] = 0;               // G
+        data[i+2] = 255 - intensity; // B
+      }
+      ctx.putImageData(imageData, 0, 0);
+      output.textContent = 'Heatmap view applied.';
+    });
+
+    resetButton.addEventListener('click', () => {
+      if (originalImageData) {
+        ctx.putImageData(originalImageData, 0, 0);
+        output.textContent = 'Image reset to original.';
+      }
+    });
+  </script>
+</body>
+</html>

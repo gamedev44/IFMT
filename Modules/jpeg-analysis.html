@@ -1,0 +1,174 @@
+<!-- Modules/jpeg-analysis.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="JPEG Analysis Tool - Image Forensics Multi-Tool" />
+  <meta name="keywords" content="Image Forensics, JPEG Analysis, Photo Analysis" />
+  <meta name="author" content="Risk" />
+  <title>JPEG Analysis - Image Forensics Multi-Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif; background-color: #f4f4f9;
+      margin: 0; padding: 0; display: flex; flex-direction: column;
+    }
+    header {
+      background-color: #333; color: #fff;
+      text-align: center; padding: 15px;
+    }
+    .container {
+      margin: 20px auto; width: 90%; max-width: 1000px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    #fileInput {
+      margin-bottom: 10px; cursor: pointer;
+    }
+    [data-tooltip] {
+      position: relative; cursor: help;
+    }
+    [data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; background: #333; color: #fff;
+      padding: 5px; border-radius: 4px;
+      top: 100%; left: 0; transform: translateY(5px);
+      z-index: 9999; font-size: 0.85rem;
+    }
+    .output {
+      background-color: #e8e8ee; padding: 10px;
+      border-radius: 5px; min-height: 100px; white-space: pre-wrap;
+    }
+    button {
+      padding: 10px 15px; background-color: #007bff;
+      color: #fff; border: none; border-radius: 5px;
+      cursor: pointer; margin-right: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .nav-buttons {
+      display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; z-index: 9999;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff; margin: 80px auto; padding: 20px;
+      width: 90%; max-width: 600px; border-radius: 6px;
+      position: relative; text-align: left; color: #000;
+    }
+    .modal-close {
+      position: absolute; top: 10px; right: 15px;
+      font-size: 20px; font-weight: bold; cursor: pointer;
+      background: none; border: none; color: #000;
+    }
+    .modal-header { font-size: 1.2em; margin-bottom: 10px; }
+    .modal-body { line-height: 1.4em; }
+    .modal-body p { margin: 0.5em 0; }
+    .modal-button {
+      margin-top: 15px; background-color: #007bff; color: #fff;
+      border: none; border-radius: 5px; padding: 8px 15px; cursor: pointer;
+    }
+    .modal-button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JPEG Analysis</h1>
+  </header>
+
+  <!-- How to Use Modal -->
+  <div id="howToUseModal" class="modal-overlay">
+    <div class="modal-content">
+      <button id="closeModal" class="modal-close">&times;</button>
+      <div class="modal-header">How to Use - JPEG Analysis</div>
+      <div class="modal-body">
+        <p><strong>Goal:</strong> Examine the internal marker segments of a JPEG file to see structure or anomalies.</p>
+        <p>1. Select a <em>JPEG</em> file only.<br>
+           2. Click "Analyze JPEG Structure" to parse marker segments.<br>
+           3. Look for suspicious or abnormal segments in the output below.</p>
+        <p>Tip: Large or missing segments can indicate re-compression or editing with certain software.</p>
+      </div>
+      <button id="closeModalBtn" class="modal-button">Close</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/jpeg"
+      data-tooltip="Choose a .jpg file to inspect internal markers"
+    />
+    <div class="nav-buttons">
+      <button
+        id="jpegAnalysisButton"
+        data-tooltip="Parse the JPEG file’s internal marker structure"
+      >
+        Analyze JPEG Structure
+      </button>
+      <button
+        id="howToUseBtn"
+        data-tooltip="Learn how to interpret the marker segments"
+      >
+        How to Use
+      </button>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const jpegAnalysisButton = document.getElementById('jpegAnalysisButton');
+    const output = document.getElementById('output');
+
+    // Modal
+    const howToUseModal = document.getElementById('howToUseModal');
+    const closeModal = document.getElementById('closeModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const howToUseBtn = document.getElementById('howToUseBtn');
+
+    howToUseBtn.onclick = () => { howToUseModal.style.display = 'block'; };
+    closeModal.onclick = () => { howToUseModal.style.display = 'none'; };
+    closeModalBtn.onclick = () => { howToUseModal.style.display = 'none'; };
+
+    jpegAnalysisButton.addEventListener('click', () => {
+      const file = fileInput.files[0];
+      if (!file) {
+        output.textContent = 'No file selected.';
+        return;
+      }
+      if (!file.type.includes('jpeg')) {
+        output.textContent = 'Please select a JPEG file.';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const arrayBuffer = e.target.result;
+        const view = new DataView(arrayBuffer);
+        let pointer = 0;
+        let segmentsInfo = '';
+        while (pointer < view.byteLength) {
+          if (view.getUint8(pointer) === 0xFF) {
+            const marker = view.getUint8(pointer + 1);
+            const length = view.getUint16(pointer + 2);
+            segmentsInfo +=
+              'Marker: 0xFF' + marker.toString(16).toUpperCase() +
+              ' Length: ' + length + '\n';
+            pointer += 2 + length;
+          } else {
+            pointer++;
+          }
+        }
+        output.textContent = 'JPEG Segments:\n\n' + segmentsInfo;
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
+</html>

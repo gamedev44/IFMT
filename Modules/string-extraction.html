@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="String Extraction Tool - Image Forensics Multi-Tool" />
+  <meta name="keywords" content="Image Forensics, String Extraction, Photo Analysis" />
+  <meta name="author" content="Risk" />
+  <title>String Extraction - Image Forensics Multi-Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background-color: #333;
+      color: #fff;
+      text-align: center;
+      padding: 15px;
+    }
+    .container {
+      margin: 20px auto;
+      width: 90%;
+      max-width: 1000px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #fileInput {
+      margin-bottom: 10px;
+    }
+    .output {
+      background-color: #e8e8ee;
+      padding: 10px;
+      border-radius: 5px;
+      min-height: 100px;
+      white-space: pre-wrap;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .nav-buttons {
+      margin-top: 10px;
+    }
+    textarea {
+      width: 100%;
+      height: 150px;
+      margin-top: 10px;
+      resize: vertical;
+    }
+    /* Modal styles */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff;
+      margin: 15% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      max-width: 500px;
+      border-radius: 5px;
+    }
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>String Extraction</h1>
+  </header>
+  <div class="container">
+    <input type="file" id="fileInput" accept="image/*" title="Select an image file for string extraction" />
+    <div class="nav-buttons">
+      <button id="extractStrings" title="Extract readable strings from the file">Extract Strings</button>
+      <button id="howToUseButton" title="Click for instructions on how to use String Extraction tool">How To Use</button>
+    </div>
+    <textarea id="textOutput" readonly title="Output area for extracted strings"></textarea>
+  </div>
+  <!-- Modal -->
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <span id="closeModal" class="close" title="Close">&times;</span>
+      <h2>String Extraction - How To Use</h2>
+      <p>Select an image file, then click "Extract Strings" to retrieve readable ASCII text from the file. The extracted strings will appear in the output area.</p>
+    </div>
+  </div>
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const extractStringsButton = document.getElementById('extractStrings');
+    const textOutput = document.getElementById('textOutput');
+    const howToUseButton = document.getElementById('howToUseButton');
+    const modal = document.getElementById('modal');
+    const closeModal = document.getElementById('closeModal');
+
+    extractStringsButton.addEventListener('click', () => {
+      const file = fileInput.files[0];
+      if (!file) {
+        textOutput.value = 'No file selected.';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const arrayBuffer = e.target.result;
+        const view = new DataView(arrayBuffer);
+        let rawData = '';
+        for (let i = 0; i < view.byteLength; i++) {
+          rawData += String.fromCharCode(view.getUint8(i));
+        }
+        const strings = rawData.match(/[ -~]{4,}/g);
+        if (strings) {
+          textOutput.value = strings.join('\n');
+        } else {
+          textOutput.value = 'No readable strings found.';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    howToUseButton.addEventListener('click', () => {
+      modal.style.display = 'block';
+    });
+    closeModal.addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+    window.addEventListener('click', (event) => {
+      if (event.target === modal) {
+        modal.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

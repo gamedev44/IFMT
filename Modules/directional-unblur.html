@@ -1,0 +1,313 @@
+<!-- Modules/directional-unblur.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Directional Unblur Tool - Image Forensics Multi-Tool" />
+  <meta name="keywords" content="Image Forensics, Directional Unblur, Photo Analysis" />
+  <meta name="author" content="Risk" />
+  <title>Directional Unblur - Image Forensics Multi-Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      margin: 0; padding: 0;
+      display: flex; flex-direction: column;
+    }
+    header {
+      background-color: #333; color: #fff;
+      text-align: center; padding: 15px;
+    }
+    .container {
+      margin: 20px auto; width: 90%; max-width: 1000px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    #fileInput {
+      margin-bottom: 10px; cursor: pointer;
+    }
+    [data-tooltip] {
+      position: relative; cursor: help;
+    }
+    [data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; background: #333; color: #fff;
+      padding: 5px; border-radius: 4px;
+      top: 100%; left: 0; transform: translateY(5px);
+      z-index: 9999; font-size: 0.85rem;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      max-width: 100%;
+      display: block;
+      margin-bottom: 10px;
+    }
+    .sliders {
+      display: flex; flex-direction: column; gap: 10px; max-width: 300px;
+    }
+    label { font-weight: bold; }
+    input[type="range"] { width: 100%; }
+    button {
+      padding: 10px 15px;
+      background-color: #007bff; color: #fff;
+      border: none; border-radius: 5px;
+      cursor: pointer; margin-right: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .nav-buttons {
+      display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    .output {
+      background-color: #e8e8ee; padding: 10px;
+      border-radius: 5px; min-height: 40px;
+      white-space: pre-wrap;
+    }
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; z-index: 9999;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff; margin: 80px auto; padding: 20px;
+      width: 90%; max-width: 600px; border-radius: 6px;
+      position: relative; text-align: left; color: #000;
+    }
+    .modal-close {
+      position: absolute; top: 10px; right: 15px;
+      font-size: 20px; font-weight: bold; cursor: pointer;
+      background: none; border: none; color: #000;
+    }
+    .modal-header {
+      font-size: 1.2em; margin-bottom: 10px;
+    }
+    .modal-body { line-height: 1.4em; }
+    .modal-body p { margin: 0.5em 0; }
+    .modal-button {
+      margin-top: 15px; background-color: #007bff; color: #fff;
+      border: none; border-radius: 5px; padding: 8px 15px; cursor: pointer;
+    }
+    .modal-button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Directional Unblur</h1>
+  </header>
+
+  <!-- How to Use Modal -->
+  <div id="howToUseModal" class="modal-overlay">
+    <div class="modal-content">
+      <button id="closeModal" class="modal-close">&times;</button>
+      <div class="modal-header">How to Use - Directional Unblur</div>
+      <div class="modal-body">
+        <p><strong>Goal:</strong> Invert a linear blur by iterating from the far end back, removing the average from subsequent pixels.</p>
+        <p>1. Load an image (with linear motion blur).<br>
+           2. Set <em>Unblur Strength</em> (S) — the approximate number of samples used in the original blur.<br>
+           3. Choose <em>Direction X/Y</em> to define the blur direction (if the blur goes right, use +X; if up, use -Y, etc.).<br>
+           4. Click <em>Attempt Unblur</em> to run a single-pass “de-averaging” from the far end back to the start.</p>
+        <p>Tip: Large S can overshoot. Try incremental adjustments to find the sweet spot. True deconvolution is more complex, but this can help restore detail for license plates, fast-moving objects, etc.</p>
+      </div>
+      <button id="closeModalBtn" class="modal-button">Close</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/*"
+      data-tooltip="Select a blurred image to attempt directional unblurring"
+    />
+    <canvas id="canvas"></canvas>
+
+    <div class="sliders">
+      <label
+        for="unblurStrength"
+        data-tooltip="Number of future pixels (S) used in the original blur. Larger might sharpen more, but can overshoot."
+      >
+        Unblur Strength (S)
+      </label>
+      <input type="range" id="unblurStrength" min="1" max="50" step="1" value="5" />
+
+      <label
+        for="dirX"
+        data-tooltip="Horizontal offset sign. If blur was to the right, use positive X; left => negative."
+      >
+        Direction X
+      </label>
+      <input type="range" id="dirX" min="-10" max="10" step="1" value="1" />
+
+      <label
+        for="dirY"
+        data-tooltip="Vertical offset sign. If blur was downward, use positive Y; upward => negative."
+      >
+        Direction Y
+      </label>
+      <input type="range" id="dirY" min="-10" max="10" step="1" value="0" />
+    </div>
+
+    <div class="nav-buttons">
+      <button
+        id="unblurButton"
+        data-tooltip="Perform the single-pass unblur from the far end back to the start"
+      >
+        Attempt Unblur
+      </button>
+      <button
+        id="resetButton"
+        data-tooltip="Restore the original image"
+      >
+        Reset Image
+      </button>
+      <button
+        id="howToUseBtn"
+        data-tooltip="View usage instructions for Directional Unblur"
+      >
+        How to Use
+      </button>
+    </div>
+
+    <div class="output" id="output"></div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const output = document.getElementById('output');
+
+    const unblurButton = document.getElementById('unblurButton');
+    const resetButton = document.getElementById('resetButton');
+    const unblurStrengthSlider = document.getElementById('unblurStrength');
+    const dirXSlider = document.getElementById('dirX');
+    const dirYSlider = document.getElementById('dirY');
+
+    let originalImageData = null;
+
+    // Modal elements
+    const howToUseModal = document.getElementById('howToUseModal');
+    const closeModal = document.getElementById('closeModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const howToUseBtn = document.getElementById('howToUseBtn');
+
+    howToUseBtn.onclick = () => { howToUseModal.style.display = 'block'; };
+    closeModal.onclick = () => { howToUseModal.style.display = 'none'; };
+    closeModalBtn.onclick = () => { howToUseModal.style.display = 'none'; };
+
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      const img = new Image();
+      reader.onload = (e) => { img.src = e.target.result; };
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        output.textContent = 'Image loaded. Adjust unblur settings and click "Attempt Unblur".';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    unblurButton.addEventListener('click', () => {
+      if (!originalImageData) {
+        output.textContent = 'No image loaded.';
+        return;
+      }
+      doUnblur();
+    });
+
+    resetButton.addEventListener('click', () => {
+      if (originalImageData) {
+        ctx.putImageData(originalImageData, 0, 0);
+        output.textContent = 'Image reset to original.';
+      }
+    });
+
+    // Core unblur logic
+    function doUnblur() {
+      const S = parseInt(unblurStrengthSlider.value, 10);
+      const dirX = parseInt(dirXSlider.value, 10);
+      const dirY = parseInt(dirYSlider.value, 10);
+
+      // Copy original data so we can read from old and write to new
+      const width = canvas.width;
+      const height = canvas.height;
+      ctx.putImageData(originalImageData, 0, 0);
+      const oldData = ctx.getImageData(0, 0, width, height).data;
+      const newImage = ctx.createImageData(width, height);
+      const newData = newImage.data;
+
+      // Determine iteration order based on sign of dirX, dirY
+      // If dirX > 0 => we go from x=width-1 down to 0
+      // If dirX < 0 => we go from x=0 to x=width-1
+      // Same for y.
+      const xStart = dirX >= 0 ? width - 1 : 0;
+      const xEnd   = dirX >= 0 ? -1 : width;
+      const xStep  = dirX >= 0 ? -1 : 1;
+
+      const yStart = dirY >= 0 ? height - 1 : 0;
+      const yEnd   = dirY >= 0 ? -1 : height;
+      const yStep  = dirY >= 0 ? -1 : 1;
+
+      // Helper to clamp a value to [0..255]
+      function clamp(val) {
+        return val < 0 ? 0 : val > 255 ? 255 : val;
+      }
+
+      // Single pass unblur:
+      for (let yy = yStart; yy !== yEnd; yy += yStep) {
+        for (let xx = xStart; xx !== xEnd; xx += xStep) {
+          // old index
+          const idx = (yy * width + xx) * 4;
+          const oldR = oldData[idx];
+          const oldG = oldData[idx + 1];
+          const oldB = oldData[idx + 2];
+          const oldA = oldData[idx + 3];
+
+          // Sum of the next S pixels in direction (dirX, dirY)
+          let sumR = 0, sumG = 0, sumB = 0;
+          let count = 0;
+
+          for (let s = 1; s <= S; s++) {
+            const nx = xx + dirX * s;
+            const ny = yy + dirY * s;
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+              const nIdx = (ny * width + nx) * 4;
+              sumR += oldData[nIdx];
+              sumG += oldData[nIdx + 1];
+              sumB += oldData[nIdx + 2];
+              count++;
+            }
+          }
+
+          // If the pixel was the average of itself + sumOfNextS, then:
+          // pOriginal = (S+1)*pBlur - sumOfNextS
+          let newR = (S + 1) * oldR - sumR;
+          let newG = (S + 1) * oldG - sumG;
+          let newB = (S + 1) * oldB - sumB;
+
+          // clamp
+          newR = clamp(newR);
+          newG = clamp(newG);
+          newB = clamp(newB);
+
+          newData[idx]     = newR;
+          newData[idx + 1] = newG;
+          newData[idx + 2] = newB;
+          newData[idx + 3] = oldA; // keep alpha
+        }
+      }
+
+      ctx.putImageData(newImage, 0, 0);
+      output.textContent = 'Unblur done. Try adjusting S or directions for better results.';
+    }
+  </script>
+</body>
+</html>
